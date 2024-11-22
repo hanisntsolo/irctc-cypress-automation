@@ -3,9 +3,11 @@ import {
     hasTatkalAlreadyOpened,
     tatkalOpenTimeForToday,
 } from "../utils";
+import {ca} from "wait-on/exampleConfig";
 
 const MANUAL_CAPTCHA = Cypress.env("MANUAL_CAPTCHA");
-
+const APP_SERVER_URL_EXTRACT_TEXT = "http://localhost:5000/extract-text";
+const APP_SERVER_URL_SAVE_IMAGE = "http://localhost:5000/save-image";
 Cypress.on("uncaught:exception", (err, runnable) => {
     // returning false here prevents Cypress from failing the test
     return false;
@@ -33,7 +35,7 @@ Cypress.Commands.add(
     }
 );
 
-function performLogin(LOGGED_IN) {
+function performLogin(LOGGED_IN, captchaStatus) {
     if (!LOGGED_IN) {
         cy.wait(500);
 
@@ -41,6 +43,7 @@ function performLogin(LOGGED_IN) {
         .should("be.visible")
         .then((el) => {
             if (el[0].innerText.includes("Logout")) {
+                postCaptchaStatus('success', 'True', captchaStatus[2], captchaStatus[3]);
                 cy.task("log", "We have logged in successfully at this stage");
             } else if (
                 el[0].innerText.includes("FORGOT ACCOUNT DETAILS") &&
@@ -52,6 +55,7 @@ function performLogin(LOGGED_IN) {
                     cy.get(".search_btn.loginText")
                     .should("include.text", "Logout")
                     .then(() => {
+                        postCaptchaStatus('success', true, '', '')
                         performLogin(true);
                     });
                 } else {
@@ -59,10 +63,14 @@ function performLogin(LOGGED_IN) {
                     cy.get(".captcha-img")
                     .invoke("attr", "src")
                     .then((value) => {
+                        // Check to see if previous captcha status is failed if yes then send to dataset
+                        if (captchaStatus !== undefined && !captchaStatus[1]) {
+                            postCaptchaStatus('failed', 'False', captchaStatus[2], captchaStatus[3]);
+                        }
                         // API call to retrieve captcha value
                         cy.request({
                             method: "POST",
-                            url: "http://localhost:5000/extract-text", // URL of the Flask server endpoint
+                            url: APP_SERVER_URL_EXTRACT_TEXT, // URL of the Flask server endpoint
                             body: {
                                 image: value, // Assuming `value` is your base64 image string
                             },
@@ -72,21 +80,21 @@ function performLogin(LOGGED_IN) {
                             .clear()
                             .type(extractedText)
                             .type("{enter}");
-
+                            const captchaStatus = ['failure', false, extractedText, value]; // Reset the status
                             cy.get("body").then((el) => {
                                 if (el[0].innerText.includes("Invalid Captcha")) {
-                                    performLogin(false);
+                                    performLogin(false, captchaStatus);
                                 } else if (el[0].innerText.includes("Logout")) {
-                                    performLogin(true);
+                                    performLogin(true, captchaStatus);
                                 } else {
-                                    performLogin(false);
+                                    performLogin(false, captchaStatus);
                                 }
                             });
                         });
                     });
                 }
             } else {
-                performLogin(false);
+                performLogin(false, captchaStatus);
             }
         });
     }
@@ -95,7 +103,7 @@ function performLogin(LOGGED_IN) {
 let MAX_ATTEMPT = 120;
 // function to solveCaptcha after logging in
 
-function solveCaptcha() {
+function solveCaptcha(captchaStatus) {
     MAX_ATTEMPT -= 1;
     cy.wrap(MAX_ATTEMPT, { timeout: 10000 }).should("be.gt", 0);
 
@@ -118,6 +126,9 @@ function solveCaptcha() {
         }
 
         if (el[0].innerText.includes("Payment Methods")) {
+            if (captchaStatus !== undefined && !captchaStatus[1]) {
+                postCaptchaStatus('success', 'True', captchaStatus[2], captchaStatus[3]);
+            }
             return;
         }
 
@@ -141,10 +152,14 @@ function solveCaptcha() {
                 cy.get(".captcha-img")
                 .invoke("attr", "src")
                 .then((value) => {
+                    // Check to see if previous captcha status is failed if yes then send to data set
+                    if (captchaStatus !== undefined && !captchaStatus[1]) {
+                        postCaptchaStatus('failed', 'False', captchaStatus[2], captchaStatus[3]);
+                    }
                     // Use the local server to solve the captcha
                     cy.request({
                         method: "POST",
-                        url: "http://localhost:5000/extract-text", // URL of the Flask server endpoint
+                        url: APP_SERVER_URL_EXTRACT_TEXT, // URL of the Flask server endpoint
                         body: {
                             image: value, // Assuming `value` is your base64 image string
                         },
@@ -154,22 +169,25 @@ function solveCaptcha() {
                         .clear()
                         .type(extractedText)
                         .type("{enter}");
-
+                        const captchaStatus = ['failure', false, extractedText, value]; // Reset the status
                         cy.get("body").then((el) => {
                             if (el[0].innerText.includes("Payment Methods")) {
                                 cy.task("log", "Bypassed Captcha");
                             } else {
-                                solveCaptcha();
+                                solveCaptcha(captchaStatus);
                             }
                         });
                     });
                 });
-                solveCaptcha();
+                solveCaptcha(captchaStatus);
             }
         } else if (el[0].innerText.includes("Payment Methods")) {
+            if (captchaStatus !== undefined && !captchaStatus[1]) {
+                postCaptchaStatus('success', 'True', captchaStatus[2], captchaStatus[3]);
+            }
             return;
         } else {
-            solveCaptcha();
+            solveCaptcha(captchaStatus);
         }
     });
 }
@@ -330,4 +348,22 @@ function BOOK_UNTIL_TATKAL_OPENS(
                 );
             }
         });
+}
+// Function to post CAPTCHA status to app-server
+function postCaptchaStatus(status, loginStatus, captchaText, base64encImage) {
+    cy.request({
+        method: "POST",
+        url: APP_SERVER_URL_SAVE_IMAGE,
+        body: {
+            "image": base64encImage,
+            "login_successful": loginStatus,
+            "label": captchaText
+        }
+    }).then((response) => {
+        cy.task("log",
+        `CAPTCHA status posted: ${status} 
+            - Login Status : ${loginStatus} 
+            - Server response : ${response.body.status}
+            - Server message : ${response.body.message}`);
+    })
 }
