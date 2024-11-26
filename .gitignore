@@ -6,3 +6,4 @@ irctc-captcha-solver/__pycache__
 cypress/downloads/"cypress.env.json" 
 cypress.*
 cypress/fixtures/passenger_data.json
+datasets
