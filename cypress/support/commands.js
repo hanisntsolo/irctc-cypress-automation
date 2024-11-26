@@ -100,7 +100,7 @@ function performLogin(LOGGED_IN, captchaStatus) {
     }
 }
 
-let MAX_ATTEMPT = 120;
+let MAX_ATTEMPT = 240;
 // function to solveCaptcha after logging in
 
 function solveCaptcha(captchaStatus) {
@@ -205,7 +205,7 @@ function BOOK_UNTIL_TATKAL_OPENS(
         // wait for exact time
         // cy.task("log", "Waiting for the exact time of opening of TATKAL...");
         const exactTimeToOpen = tatkalOpenTimeForToday(TRAIN_COACH);
-        cy.get("div.h_head1", { timeout: 300000 }).should(
+        cy.get("div.h_head1", { timeout: 600000 }).should(
             "include.text",
             exactTimeToOpen
         );
@@ -358,7 +358,8 @@ function postCaptchaStatus(status, loginStatus, captchaText, base64encImage) {
             "image": base64encImage,
             "login_successful": loginStatus,
             "label": captchaText
-        }
+        },
+        failOnStatusCode: false
     }).then((response) => {
         cy.task("log",
         `CAPTCHA status posted: ${status} 
