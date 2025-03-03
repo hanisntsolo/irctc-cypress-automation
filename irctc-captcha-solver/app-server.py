@@ -68,7 +68,8 @@ def detect_captcha(model, image):
 def extract_text_from_image(base64_image, model, class_labels):
   try:
     # Convert the base64 image to bytes
-    image_bytes = base64.b64decode(base64_image[22:])
+    # image_bytes = base64.b64decode(base64_image[22:])
+    image_bytes = base64.b64decode(base64_image) # to handle the captcha coming from irctc-api
     image_buffer = io.BytesIO(image_bytes)
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     current_time = datetime.now().time()  # Get the current system time
@@ -173,7 +174,7 @@ def extract_text():
 
   # Extract text from the base64 image
   extracted_text = extract_text_from_image(base64_image, model, class_labels)
-
+  print("Extracted Text : ", extracted_text)
   return jsonify({"extracted_text": extracted_text})
 
 @app.route("/save-image", methods=["POST"])
